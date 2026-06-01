@@ -63,6 +63,7 @@ const dom = {
   timelineRange: document.getElementById("timelineRange"),
   chartTopN: document.getElementById("chartTopN"),
   searchInput: document.getElementById("searchInput"),
+  tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
   statusFilterOptions: document.getElementById("statusFilterOptions"),
@@ -93,6 +94,10 @@ function init() {
   [dom.searchInput].forEach((el) => {
     el.addEventListener("input", applyFilters);
   });
+
+  if (dom.tableSearchInput) {
+    dom.tableSearchInput.addEventListener("input", () => renderTable(state.filteredRows));
+  }
 
   [dom.timelineRange, dom.chartTopN].forEach((el) => {
     el.addEventListener("change", () => renderCharts(state.filteredRows));
@@ -673,27 +678,54 @@ function getSelectedColumns() {
 
 function renderTable(rows) {
   const selectedColumns = getSelectedColumns();
+  const tableSearch = cleanText(dom.tableSearchInput?.value || "").toLowerCase();
+  const searchedRows = tableSearch ? rows.filter((row) => matchesTableSearch(row, tableSearch)) : rows;
   const limit = 250;
-  const viewRows = rows.slice(0, limit);
+  const viewRows = searchedRows.slice(0, limit);
 
   dom.rowsInfo.textContent =
-    "Mostrando " + formatInt.format(viewRows.length) + " de " + formatInt.format(rows.length) + " registros";
+    "Mostrando " +
+    formatInt.format(viewRows.length) +
+    " de " +
+    formatInt.format(searchedRows.length) +
+    " registros" +
+    (tableSearch ? " en el detalle" : "");
 
   dom.tableHead.innerHTML =
     "<tr>" + selectedColumns.map((col) => "<th>" + escapeHtml(col.label) + "</th>").join("") + "</tr>";
 
-  dom.tableBody.innerHTML = viewRows
-    .map((row) => {
-      const cells = selectedColumns.map((col) => {
-        if (col.editableStatus) {
-          return '<td class="status-cell">' + statusSelectHtml(row) + "</td>";
-        }
-        const value = col.value ? col.value(row) : "";
-        return "<td>" + escapeHtml(value) + "</td>";
-      });
-      return "<tr>" + cells.join("") + "</tr>";
-    })
-    .join("");
+  dom.tableBody.innerHTML = viewRows.length
+    ? viewRows
+        .map((row) => {
+          const cells = selectedColumns.map((col) => {
+            if (col.editableStatus) {
+              return '<td class="status-cell">' + statusSelectHtml(row) + "</td>";
+            }
+            const value = col.value ? col.value(row) : "";
+            return "<td>" + escapeHtml(value) + "</td>";
+          });
+          return "<tr>" + cells.join("") + "</tr>";
+        })
+        .join("")
+    : '<tr><td class="table-empty" colspan="' + selectedColumns.length + '">No hay resultados para esa busqueda.</td></tr>';
+}
+
+function matchesTableSearch(row, query) {
+  return [
+    row.solped,
+    row.objeto,
+    row.proceso,
+    row.expediente,
+    row.comprador,
+    row.fabrica,
+    row.estado,
+    row.oc,
+    row.observaciones,
+    row.estimado ? formatMoney.format(row.estimado) : "",
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
 }
 
 function statusSelectHtml(row) {
@@ -731,13 +763,6 @@ function renderCharts(rows) {
   const byStatusCountRaw = countBy(rows, (r) => r.estado || "Sin estado");
   const byStatusCount = toTopNWithOthers(byStatusCountRaw, topN);
 
-  const amountByStatusRaw = rows.reduce((acc, row) => {
-    const key = row.estado || "Sin estado";
-    acc[key] = (acc[key] || 0) + (row.estimado || 0);
-    return acc;
-  }, {});
-  const amountByStatus = toTopNWithOthers(amountByStatusRaw, topN);
-
   const byMonthAll = countBy(rows, (r) => {
     const d = r.desdeFecha || r.apertura;
     if (!d) return null;
@@ -759,16 +784,10 @@ function renderCharts(rows) {
     ],
   });
 
-  state.charts.amount = drawChart(state.charts.amount, "amountChart", "bar", {
-    labels: Object.keys(amountByStatus),
-    datasets: [
-      {
-        label: "Monto estimado",
-        data: Object.values(amountByStatus),
-        backgroundColor: "#0f766e",
-      },
-    ],
-  });
+  if (state.charts.amount) {
+    state.charts.amount.destroy();
+    state.charts.amount = null;
+  }
 
   state.charts.timeline = drawChart(state.charts.timeline, "timelineChart", "line", {
     labels: monthLabels,

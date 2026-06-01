@@ -123,10 +123,6 @@
               <canvas id="statusChart"></canvas>
             </article>
             <article class="card">
-              <h3>Monto por estado</h3>
-              <canvas id="amountChart"></canvas>
-            </article>
-            <article class="card wide">
               <h3>Evolucion mensual</h3>
               <canvas id="timelineChart"></canvas>
             </article>
@@ -134,8 +130,13 @@
 
           <section class="table-section card">
             <div class="table-head">
-              <h3>Detalle de procesos</h3>
-              <span id="rowsInfo"></span>
+              <div class="table-meta">
+                <h3>Detalle de procesos</h3>
+                <span id="rowsInfo"></span>
+              </div>
+              <div class="table-tools">
+                <input id="tableSearchInput" type="text" placeholder="Buscar en el detalle de procesos" />
+              </div>
             </div>
             <div class="table-wrap">
               <table>
