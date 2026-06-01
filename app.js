@@ -67,11 +67,8 @@ const dom = {
   timelineRange: document.getElementById("timelineRange"),
   chartTopN: document.getElementById("chartTopN"),
   searchInput: document.getElementById("searchInput"),
-  statusChangedToday: document.getElementById("statusChangedToday"),
-  statusStale30: document.getElementById("statusStale30"),
-  statusCritical60: document.getElementById("statusCritical60"),
-  statusAvgAge: document.getElementById("statusAvgAge"),
-  staleExpedientesList: document.getElementById("staleExpedientesList"),
+  buyerCountsList: document.getElementById("buyerCountsList"),
+  buyerStatsSummary: document.getElementById("buyerStatsSummary"),
   tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
@@ -120,8 +117,7 @@ function init() {
 
   renderKpiSelector();
   renderColumnSelector();
-  renderStatusSignals([]);
-  migrateStatusMetaIfNeeded();
+  renderBuyerCounts([]);
 
   loadPreferredSource();
   setInterval(() => {
@@ -479,162 +475,37 @@ function applyFilters() {
   });
 
   renderKpis(state.filteredRows);
-  renderStatusSignals(state.rawRows);
+  renderBuyerCounts(state.rawRows);
   renderTable(state.filteredRows);
   renderCharts(state.filteredRows);
 }
 
-function renderStatusSignals(rows) {
-  if (!dom.statusChangedToday || !dom.statusStale30 || !dom.statusCritical60 || !dom.statusAvgAge) return;
+function renderBuyerCounts(rows) {
+  if (!dom.buyerCountsList) return;
 
-  const now = new Date();
-  const changedTodayExpedientes = new Set();
-  const ages = [];
-  let stale30 = 0;
-  let critical60 = 0;
+  const counts = rows.reduce((acc, row) => {
+    const buyer = cleanText(row.comprador) || "Sin comprador";
+    acc[buyer] = (acc[buyer] || 0) + 1;
+    return acc;
+  }, {});
 
-  rows.forEach((row) => {
-    if (isClosedStatus(row.estado)) return;
+  const items = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  dom.buyerStatsSummary.textContent = formatInt.format(items.length) + " compradores";
 
-    const meta = state.statusMeta[row.id];
-    const changedAt = parseMetaDate(meta && meta.changedAt);
-
-    if (changedAt && meta.currentStatus === row.estado && isSameLocalDay(changedAt, now)) {
-      changedTodayExpedientes.add(getExpedienteKey(row));
-    }
-
-    const age = getStatusAgeDays(row, now);
-    if (age === null) return;
-
-    ages.push(age);
-    if (age >= 30) stale30 += 1;
-    if (age >= 60) critical60 += 1;
-  });
-
-  const avgAge = ages.length ? ages.reduce((acc, v) => acc + v, 0) / ages.length : 0;
-
-  dom.statusChangedToday.textContent = formatInt.format(changedTodayExpedientes.size);
-  dom.statusStale30.textContent = formatInt.format(stale30);
-  dom.statusCritical60.textContent = formatInt.format(critical60);
-  dom.statusAvgAge.textContent = avgAge.toFixed(1);
-
-  renderStaleExpedientes(rows, now);
-}
-
-function renderStaleExpedientes(rows, now) {
-  if (!dom.staleExpedientesList) return;
-
-  const byExpediente = new Map();
-  const excludedExpedientes = new Set(rows.filter((row) => isClosedStatus(row.estado)).map((row) => getExpedienteKey(row)));
-
-  rows.forEach((row) => {
-    if (excludedExpedientes.has(getExpedienteKey(row))) return;
-
-    const age = getStatusAgeDays(row, now);
-    if (age === null) return;
-
-    const expediente = cleanText(row.expediente);
-    const key = getExpedienteKey(row);
-    const current = byExpediente.get(key);
-
-    if (!current || age > current.ageDays) {
-      byExpediente.set(key, {
-        expediente: expediente || "Sin expediente",
-        proceso: cleanText(row.proceso) || "Sin proceso",
-        estado: cleanText(row.estado) || "Sin estado",
-        ageDays: age,
-      });
-    }
-  });
-
-  const top = [...byExpediente.values()].sort((a, b) => b.ageDays - a.ageDays).slice(0, 5);
-
-  dom.staleExpedientesList.innerHTML = top.length
-    ? top
+  dom.buyerCountsList.innerHTML = items.length
+    ? items
         .map(
-          (item) =>
-            '<li class="status-alert-item">' +
-            '<div class="status-alert-main">' +
-            '<button type="button" class="status-alert-link" data-expediente-filter="' +
-            escapeHtml(item.expediente) +
-            '">' +
-            escapeHtml(item.expediente) +
-            "</button>" +
-            '<span class="status-alert-meta">' +
-            escapeHtml(item.proceso) +
-            " | " +
-            escapeHtml(item.estado) +
-            "</span>" +
-            "</div>" +
-            '<span class="status-alert-age">' +
-            formatInt.format(item.ageDays) +
-            " dias</span></li>"
+          ([buyer, count]) =>
+            '<li class="buyer-count-item">' +
+            '<span class="buyer-count-name">' +
+            escapeHtml(buyer) +
+            '</span>' +
+            '<strong class="buyer-count-value">' +
+            formatInt.format(count) +
+            '</strong></li>'
         )
         .join("")
-    : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
-}
-
-function isClosedStatus(status) {
-  const normalized = cleanText(status).toLowerCase();
-  return (
-    normalized.includes("adjudicado") ||
-    normalized.includes("dado de baja") ||
-    normalized.includes("baja") ||
-    normalized.includes("cancelad") ||
-    normalized.includes("desestimad") ||
-    normalized.includes("cerrad")
-  );
-}
-
-function handleStaleExpedienteClick(event) {
-  const trigger = event.target.closest("button[data-expediente-filter]");
-  if (!trigger) return;
-
-  const expediente = cleanText(trigger.dataset.expedienteFilter);
-  if (!expediente) return;
-
-  dom.searchInput.value = expediente;
-  if (dom.tableSearchInput) {
-    dom.tableSearchInput.value = expediente;
-  }
-
-  applyFilters();
-  dom.tableSearchInput?.scrollIntoView({ behavior: "smooth", block: "center" });
-  dom.tableSearchInput?.focus();
-}
-
-function getStatusAgeDays(row, now) {
-  const meta = state.statusMeta[row.id];
-  const since = parseMetaDate(meta && meta.changedAt);
-
-  if (!since) return null;
-
-  const sinceStart = startOfDay(since);
-  const nowStart = startOfDay(now);
-  const days = Math.floor((nowStart.getTime() - sinceStart.getTime()) / (1000 * 60 * 60 * 24));
-  return Number.isFinite(days) && days >= 0 ? days : null;
-}
-
-function getExpedienteKey(row) {
-  return cleanText(row.expediente) || row.id;
-}
-
-function parseMetaDate(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
-
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function isSameLocalDay(a, b) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+    : '<li class="buyer-count-empty">No hay compras cargadas.</li>';
 }
 
 function populateFilters(rows) {

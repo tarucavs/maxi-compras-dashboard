@@ -139,135 +139,70 @@ h1 {
   margin-top: 0.85rem;
 }
 
-.status-signals {
+.buyer-stats {
   margin-top: 1rem;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-
-.signal-card {
-  border: 1px solid #d8e4ef;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f1f6fb 100%);
-  padding: 0.65rem 0.75rem;
-}
-
-.signal-card p {
-  margin: 0;
-  color: #4f6478;
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.signal-card strong {
-  display: block;
-  margin-top: 0.2rem;
-  color: #143756;
-  font-size: 1.1rem;
-}
-
-.status-alerts {
-  margin-top: 0.7rem;
+  padding: 1rem;
   border: 1px solid #d6e3ef;
   border-radius: 14px;
   background: #f8fbfe;
-  padding: 0.7rem;
 }
 
-.status-alerts-head {
+.buyer-stats-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
 }
 
-.status-alerts-head h3 {
+.buyer-stats-head h3 {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  font-size: 0.95rem;
+  font-size: 0.98rem;
   letter-spacing: 0.01em;
 }
 
-.status-alerts-head small {
+.buyer-stats-head small {
   color: #5d7287;
   font-size: 0.78rem;
 }
 
-.status-alerts-list {
+.buyer-counts-list {
   list-style: none;
-  margin: 0.55rem 0 0;
+  margin: 0.75rem 0 0;
   padding: 0;
   display: grid;
-  gap: 0.4rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
-.status-alert-item {
+.buyer-count-item {
   display: flex;
   justify-content: space-between;
-  gap: 0.55rem;
+  gap: 0.75rem;
   align-items: center;
   border: 1px solid #e2ebf3;
   border-radius: 10px;
   background: #fff;
-  padding: 0.45rem 0.55rem;
+  padding: 0.5rem 0.6rem;
 }
 
-.status-alert-main {
+.buyer-count-name {
   min-width: 0;
-  display: grid;
-  gap: 0.1rem;
-}
-
-.status-alert-link {
-  appearance: none;
-  width: auto;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  text-align: left;
-  background: transparent;
   color: #1a3b59;
   font-size: 0.84rem;
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  box-shadow: none;
-}
-
-.status-alert-link:hover {
-  transform: none;
-  box-shadow: none;
-  color: #0b4f8a;
-}
-
-.status-alert-link:focus-visible {
-  outline: 2px solid #0b4f8a;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.status-alert-main strong {
-  font-size: 0.84rem;
-  color: #1a3b59;
-}
-
-.status-alert-meta {
-  font-size: 0.76rem;
-  color: #5b7287;
-  white-space: nowrap;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.status-alert-age {
-  font-weight: 700;
-  color: #8a2d2d;
-  font-size: 0.82rem;
   white-space: nowrap;
 }
 
-.status-alert-empty {
+.buyer-count-value {
+  font-size: 0.9rem;
+  color: #0b4f8a;
+  white-space: nowrap;
+}
+
+.buyer-count-empty {
+  grid-column: 1 / -1;
   border: 1px dashed #d8e4ef;
   border-radius: 10px;
   color: #5d7387;
@@ -725,18 +660,13 @@ th {
 }
 
 @media (max-width: 680px) {
-  .status-signals {
+  .buyer-stats-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .buyer-counts-list {
     grid-template-columns: 1fr;
-  }
-
-  .status-alerts-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .status-alert-item {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .kpi-grid {
