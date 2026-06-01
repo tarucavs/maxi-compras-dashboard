@@ -933,11 +933,27 @@ function parseNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number") return value;
 
-  const normalized = String(value)
-    .trim()
-    .replace(/\./g, "")
-    .replace(/,/g, ".")
-    .replace(/[^0-9.-]/g, "");
+  const raw = String(value).trim().replace(/[^0-9,.-]/g, "");
+  if (!raw) return null;
+
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  let normalized = raw;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    // Usa el ultimo separador como decimal y limpia el otro como miles.
+    if (lastComma > lastDot) {
+      normalized = raw.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      normalized = raw.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    const decimals = raw.length - lastComma - 1;
+    normalized = decimals > 0 && decimals <= 2 ? raw.replace(/,/g, ".") : raw.replace(/,/g, "");
+  } else if (lastDot >= 0) {
+    const decimals = raw.length - lastDot - 1;
+    normalized = decimals > 0 && decimals <= 2 ? raw : raw.replace(/\./g, "");
+  }
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
