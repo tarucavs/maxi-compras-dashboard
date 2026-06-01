@@ -1,12 +1,10 @@
 const FALLBACK_FILE_NAME = "SEGUIMIENTOS COMPRAS FABRICACIONES MILITARES (10).xlsx";
 const GOOGLE_SHEETS_EDIT_URL = "https://docs.google.com/spreadsheets/d/1kFaKvilRf1z97XC15fAMYgS9l0cPq4bC-UF7VRVR9_U/edit?gid=0#gid=0";
 const GOOGLE_REFRESH_MS = 30 * 1000;
-const STATUS_META_SCHEMA_VERSION = "2";
 
 const STORAGE_KEYS = {
   statuses: "compras_dashboard_status_overrides_v2",
   statusMeta: "compras_dashboard_status_meta_v1",
-  statusMetaSchema: "compras_dashboard_status_meta_schema_v1",
   kpis: "compras_dashboard_selected_kpis_v2",
   columns: "compras_dashboard_selected_columns_v1",
   filters: "compras_dashboard_filters_v1",
@@ -50,7 +48,6 @@ const state = {
     status: null,
     amount: null,
     timeline: null,
-    buyer: null,
   },
 };
 
@@ -68,6 +65,11 @@ const dom = {
   timelineRange: document.getElementById("timelineRange"),
   chartTopN: document.getElementById("chartTopN"),
   searchInput: document.getElementById("searchInput"),
+  statusChangedToday: document.getElementById("statusChangedToday"),
+  statusStale30: document.getElementById("statusStale30"),
+  statusCritical60: document.getElementById("statusCritical60"),
+  statusAvgAge: document.getElementById("statusAvgAge"),
+  staleExpedientesList: document.getElementById("staleExpedientesList"),
   tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
@@ -112,6 +114,7 @@ function init() {
 
   renderKpiSelector();
   renderColumnSelector();
+  renderStatusSignals([]);
 
   loadPreferredSource();
   setInterval(() => {
@@ -131,10 +134,8 @@ async function loadPreferredSource(options = {}) {
     return;
   }
 
-  const onlineOk = await loadFromGoogleSheet({ silent: true });
-  if (!onlineOk) {
-    await loadDefaultFromFolder();
-  }
+  await loadDefaultFromFolder();
+  loadFromGoogleSheet({ silent: true });
 }
 
 async function loadFromGoogleSheet(options = {}) {
@@ -153,6 +154,7 @@ async function loadFromGoogleSheet(options = {}) {
     dom.loadHint.textContent = "Actualizando desde Google Sheets...";
   }
 
+  // Primera opcion: JSONP para evitar bloqueos CORS en navegadores.
   try {
     const jsonpRows = await loadFromGoogleGvizJsonp(sheet);
     if (Array.isArray(jsonpRows) && jsonpRows.length) {
@@ -162,6 +164,7 @@ async function loadFromGoogleSheet(options = {}) {
       return true;
     }
   } catch (_error) {
+    // Continua con metodos de respaldo.
   }
 
   const urls = [
@@ -191,16 +194,23 @@ async function loadFromGoogleSheet(options = {}) {
 
       if (candidate.type === "csv") {
         const csvText = await response.text();
-        parseCsv(csvText);
+        const loaded = parseCsv(csvText);
+        if (!loaded) {
+          continue;
+        }
       } else {
         const arrayBuffer = await response.arrayBuffer();
-        parseWorkbook(arrayBuffer);
+        const loaded = parseWorkbook(arrayBuffer);
+        if (!loaded) {
+          continue;
+        }
       }
 
       dom.loadHint.textContent = "Datos actualizados desde Google Sheets.";
       setSourceInfo({ connected: true, sourceName: candidate.name, atDate: new Date() });
       return true;
     } catch (_error) {
+      // Intenta la siguiente ruta
     }
   }
 
@@ -302,9 +312,11 @@ async function loadDefaultFromFolder() {
     parseWorkbook(arrayBuffer);
     dom.loadHint.textContent = "Archivo local cargado correctamente.";
     setSourceInfo({ connected: false, sourceName: "Archivo local", atDate: new Date() });
+    return true;
   } catch (_error) {
     dom.loadHint.textContent =
       "No se pudo cargar archivo local. Si abriste con file://, usa servidor local (python -m http.server).";
+    return false;
   }
 }
 
@@ -349,16 +361,15 @@ function parseCsv(csvText) {
   const firstSheet = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheet];
   const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: true });
-  ingestRows(rows);
+  return ingestRows(rows);
 }
 
 function parseWorkbook(arrayBuffer) {
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
   const firstSheet = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheet];
-  // Usa valores crudos para conservar fechas/seriales y parsearlos de forma controlada.
   const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: true });
-  ingestRows(rows);
+  return ingestRows(rows);
 }
 
 function ingestRows(rows) {
@@ -366,34 +377,23 @@ function ingestRows(rows) {
     .map((row) => normalizeRow(row))
     .filter((row) => row.solped || row.objeto || row.proceso);
 
+  if (!state.rawRows.length) {
+    return 0;
+  }
+
   state.rawRows.forEach((row) => {
     const override = state.statusOverrides[row.id];
     if (override) {
       row.estado = override;
     }
-
-    // Inicializa/actualiza la fecha base de estado para contar demoras desde la
-    // ultima modificacion conocida del estado.
-    const knownMeta = state.statusMeta[row.id];
-    const knownChangedAt = parseMetaDate(knownMeta && knownMeta.changedAt);
-    const baseChangedAt = new Date();
-
-    if (!knownMeta || knownMeta.currentStatus !== row.estado || !knownChangedAt) {
-      state.statusMeta[row.id] = {
-        changedAt: (baseChangedAt || new Date()).toISOString(),
-        previousStatus: knownMeta && knownMeta.currentStatus ? knownMeta.currentStatus : null,
-        currentStatus: row.estado,
-      };
-    }
   });
-
-  localStorage.setItem(STORAGE_KEYS.statusMeta, JSON.stringify(state.statusMeta));
 
   populateFilters(state.rawRows);
   applyFilters();
 
   dom.emptyState.classList.add("hidden");
   dom.dashboard.classList.remove("hidden");
+  return state.rawRows.length;
 }
 
 function normalizeRow(row) {
@@ -412,7 +412,6 @@ function normalizeRow(row) {
     estimado: estimated,
     observaciones: cleanText(getRowValue(row, ["OBSERVACIONES"])),
     apertura: parseDate(getRowValue(row, ["APERTURA"])),
-    // La demora debe salir de la columna DESDE (FECHA), sin tomar otras columnas "DESDE".
     desdeFecha: parseDate(getDesdeFechaValue(row)),
     comprador: cleanText(getRowValue(row, ["COMPRADOR"])) || "Sin comprador",
     fabrica: cleanText(getRowValue(row, ["FÁBRICA", "FABRICA"])) || "Sin fabrica",
@@ -469,50 +468,133 @@ function applyFilters() {
   });
 
   renderKpis(state.filteredRows);
-  renderBuyerChart(state.rawRows);
+  renderStatusSignals(state.rawRows);
   renderTable(state.filteredRows);
   renderCharts(state.filteredRows);
 }
 
-function renderBuyerChart(rows) {
-  const expedientesByBuyer = rows.reduce((acc, row) => {
-    const buyer = cleanText(row.comprador) || "Sin comprador";
-    const exp = cleanText(row.expediente) || row.id;
-    if (!acc[buyer]) acc[buyer] = new Set();
-    if (exp) acc[buyer].add(exp);
-    return acc;
-  }, {});
+function renderStatusSignals(rows) {
+  if (!dom.statusChangedToday || !dom.statusStale30 || !dom.statusCritical60 || !dom.statusAvgAge) return;
 
-  const sorted = Object.entries(expedientesByBuyer)
-    .map(([buyer, exps]) => ({ buyer, count: exps.size }))
-    .sort((a, b) => b.count - a.count);
+  const now = new Date();
+  const changedTodayExpedientes = new Set();
+  const ages = [];
+  let stale30 = 0;
+  let critical60 = 0;
 
-  const labels = sorted.map((d) => d.buyer);
-  const data = sorted.map((d) => d.count);
+  rows.forEach((row) => {
+    const meta = state.statusMeta[row.id];
+    const changedAt = parseMetaDate(meta && meta.changedAt);
 
-  const colors = labels.map((_, i) => {
-    const palette = ["#0f766e", "#2563eb", "#7c3aed", "#f77f00", "#dc2626", "#0e7490", "#4b5563", "#b45309"];
-    return palette[i % palette.length];
+    if (changedAt && meta.currentStatus === row.estado && isSameLocalDay(changedAt, now)) {
+      changedTodayExpedientes.add(getExpedienteKey(row));
+    }
+
+    const age = getStatusAgeDays(row, now);
+    if (age === null) return;
+
+    ages.push(age);
+    if (age >= 30) stale30 += 1;
+    if (age >= 60) critical60 += 1;
   });
 
-  state.charts.buyer = drawChart(state.charts.buyer, "buyerChart", "bar", {
-    labels,
-    datasets: [
-      {
-        label: "Expedientes",
-        data,
-        backgroundColor: colors,
-        borderRadius: 5,
-      },
-    ],
-  }, {
-    indexAxis: "y",
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { beginAtZero: true, ticks: { stepSize: 1 } },
-      y: { ticks: { font: { size: 12 } } },
-    },
+  const avgAge = ages.length ? ages.reduce((acc, v) => acc + v, 0) / ages.length : 0;
+
+  dom.statusChangedToday.textContent = formatInt.format(changedTodayExpedientes.size);
+  dom.statusStale30.textContent = formatInt.format(stale30);
+  dom.statusCritical60.textContent = formatInt.format(critical60);
+  dom.statusAvgAge.textContent = avgAge.toFixed(1);
+
+  renderStaleExpedientes(rows, now);
+}
+
+function renderStaleExpedientes(rows, now) {
+  if (!dom.staleExpedientesList) return;
+
+  const byExpediente = new Map();
+
+  rows.forEach((row) => {
+    const age = getStatusAgeDays(row, now);
+    if (age === null) return;
+
+    const expediente = cleanText(row.expediente);
+    const key = expediente || row.id;
+    const current = byExpediente.get(key);
+
+    if (!current || age > current.ageDays) {
+      byExpediente.set(key, {
+        expediente: expediente || "Sin expediente",
+        proceso: cleanText(row.proceso) || "Sin proceso",
+        estado: cleanText(row.estado) || "Sin estado",
+        ageDays: age,
+      });
+    }
   });
+
+  const top = [...byExpediente.values()].sort((a, b) => b.ageDays - a.ageDays).slice(0, 5);
+
+  dom.staleExpedientesList.innerHTML = top.length
+    ? top
+        .map(
+          (item) =>
+            '<li class="status-alert-item">' +
+            '<div class="status-alert-main">' +
+            '<strong>' +
+            escapeHtml(item.expediente) +
+            "</strong>" +
+            '<span class="status-alert-meta">' +
+            escapeHtml(item.proceso) +
+            " | " +
+            escapeHtml(item.estado) +
+            "</span>" +
+            "</div>" +
+            '<span class="status-alert-age">' +
+            formatInt.format(item.ageDays) +
+            " dias</span></li>"
+        )
+        .join("")
+    : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
+}
+
+function getStatusAgeDays(row, now) {
+  const meta = state.statusMeta[row.id];
+  const changedAt = parseMetaDate(meta && meta.changedAt);
+  let since = null;
+
+  if (changedAt && meta.currentStatus === row.estado) {
+    since = changedAt;
+  } else {
+    since = row.desdeFecha || row.apertura || null;
+  }
+
+  if (!since) return null;
+
+  const sinceStart = startOfDay(since);
+  const nowStart = startOfDay(now);
+  const days = Math.floor((nowStart.getTime() - sinceStart.getTime()) / (1000 * 60 * 60 * 24));
+  return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
+function getExpedienteKey(row) {
+  return cleanText(row.expediente) || row.id;
+}
+
+function parseMetaDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function isSameLocalDay(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 function populateFilters(rows) {
@@ -930,43 +1012,39 @@ function toTopNWithOthers(dict, topN) {
   return Object.fromEntries([...top, ["Otros", othersValue]]);
 }
 
-function drawChart(oldChart, canvasId, type, data, optionOverrides) {
+function drawChart(oldChart, canvasId, type, data) {
   if (oldChart) {
     oldChart.destroy();
   }
 
-  const defaultOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: true,
-        labels: {
-          font: { family: "Space Grotesk" },
-        },
-      },
-    },
-    scales:
-      type === "doughnut"
-        ? undefined
-        : {
-            x: {
-              ticks: { color: "#4a5c6f" },
-              grid: { color: "rgba(0,0,0,0.05)" },
-            },
-            y: {
-              ticks: { color: "#4a5c6f" },
-              grid: { color: "rgba(0,0,0,0.05)" },
-            },
-          },
-  };
-
-  const options = optionOverrides ? Object.assign({}, defaultOptions, optionOverrides) : defaultOptions;
-
   return new Chart(document.getElementById(canvasId), {
     type,
     data,
-    options,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            font: { family: "Space Grotesk" },
+          },
+        },
+      },
+      scales:
+        type === "doughnut"
+          ? undefined
+          : {
+              x: {
+                ticks: { color: "#4a5c6f" },
+                grid: { color: "rgba(0,0,0,0.05)" },
+              },
+              y: {
+                ticks: { color: "#4a5c6f" },
+                grid: { color: "rgba(0,0,0,0.05)" },
+              },
+            },
+    },
   });
 }
 
@@ -1003,19 +1081,6 @@ function loadStoredStatusMeta() {
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch (_error) {
     return {};
-  }
-}
-
-function migrateStatusMetaIfNeeded() {
-  try {
-    const savedSchema = localStorage.getItem(STORAGE_KEYS.statusMetaSchema);
-    if (savedSchema === STATUS_META_SCHEMA_VERSION) return;
-
-    state.statusMeta = {};
-    localStorage.setItem(STORAGE_KEYS.statusMeta, JSON.stringify(state.statusMeta));
-    localStorage.setItem(STORAGE_KEYS.statusMetaSchema, STATUS_META_SCHEMA_VERSION);
-  } catch (_error) {
-    // Si falla storage, continua sin bloquear la carga del dashboard.
   }
 }
 
@@ -1097,7 +1162,6 @@ function parseDate(value) {
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
 
   if (typeof value === "number" && Number.isFinite(value)) {
-    // Serial de Excel: dias desde 1899-12-30.
     const ms = Date.UTC(1899, 11, 30) + value * 86400000;
     const dt = new Date(ms);
     return isNaN(dt.getTime()) ? null : new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());

@@ -31,7 +31,31 @@
           Vista profesional de procesos, montos y desempeno para decisiones rapidas.
           Carga tu Excel y obten indicadores KPI automaticamente.
         </p>
-
+        <section class="status-signals" aria-label="Indicadores de estado de expedientes">
+          <article class="signal-card">
+            <p>Expedientes con cambio hoy</p>
+            <strong id="statusChangedToday">0</strong>
+          </article>
+          <article class="signal-card">
+            <p>Expedientes +30 dias en estado</p>
+            <strong id="statusStale30">0</strong>
+          </article>
+          <article class="signal-card">
+            <p>Expedientes criticos (+60 dias)</p>
+            <strong id="statusCritical60">0</strong>
+          </article>
+          <article class="signal-card">
+            <p>Promedio dias sin cambio</p>
+            <strong id="statusAvgAge">0</strong>
+          </article>
+        </section>
+        <section class="status-alerts" aria-label="Expedientes demorados">
+          <div class="status-alerts-head">
+            <h3>Top 5 expedientes mas demorados</h3>
+            <small>Ordenados por dias sin cambio de estado</small>
+          </div>
+          <ul id="staleExpedientesList" class="status-alerts-list"></ul>
+        </section>
       </div>
       <div class="upload-card">
         <h2>Fuente de datos</h2>
@@ -126,12 +150,6 @@
             <article class="card">
               <h3>Evolucion mensual</h3>
               <canvas id="timelineChart"></canvas>
-            </article>
-          </section>
-          <section class="charts-grid charts-grid--full">
-            <article class="card">
-              <h3>Expedientes por comprador</h3>
-              <canvas id="buyerChart"></canvas>
             </article>
           </section>
 
