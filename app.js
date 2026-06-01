@@ -69,6 +69,7 @@ const dom = {
   statusStale30: document.getElementById("statusStale30"),
   statusCritical60: document.getElementById("statusCritical60"),
   statusAvgAge: document.getElementById("statusAvgAge"),
+  staleExpedientesList: document.getElementById("staleExpedientesList"),
   tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
@@ -458,6 +459,56 @@ function renderStatusSignals(rows) {
   dom.statusStale30.textContent = formatInt.format(stale30);
   dom.statusCritical60.textContent = formatInt.format(critical60);
   dom.statusAvgAge.textContent = avgAge.toFixed(1);
+
+  renderStaleExpedientes(rows, now);
+}
+
+function renderStaleExpedientes(rows, now) {
+  if (!dom.staleExpedientesList) return;
+
+  const byExpediente = new Map();
+
+  rows.forEach((row) => {
+    const age = getStatusAgeDays(row, now);
+    if (age === null) return;
+
+    const expediente = cleanText(row.expediente);
+    const key = expediente || row.id;
+    const current = byExpediente.get(key);
+
+    if (!current || age > current.ageDays) {
+      byExpediente.set(key, {
+        expediente: expediente || "Sin expediente",
+        proceso: cleanText(row.proceso) || "Sin proceso",
+        estado: cleanText(row.estado) || "Sin estado",
+        ageDays: age,
+      });
+    }
+  });
+
+  const top = [...byExpediente.values()].sort((a, b) => b.ageDays - a.ageDays).slice(0, 5);
+
+  dom.staleExpedientesList.innerHTML = top.length
+    ? top
+        .map(
+          (item) =>
+            '<li class="status-alert-item">' +
+            '<div class="status-alert-main">' +
+            '<strong>' +
+            escapeHtml(item.expediente) +
+            "</strong>" +
+            '<span class="status-alert-meta">' +
+            escapeHtml(item.proceso) +
+            " | " +
+            escapeHtml(item.estado) +
+            "</span>" +
+            "</div>" +
+            '<span class="status-alert-age">' +
+            formatInt.format(item.ageDays) +
+            " dias</span></li>"
+        )
+        .join("")
+    : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
 }
 
 function getStatusAgeDays(row, now) {
