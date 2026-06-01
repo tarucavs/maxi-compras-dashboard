@@ -473,6 +473,8 @@ function renderStaleExpedientes(rows, now) {
   const byExpediente = new Map();
 
   rows.forEach((row) => {
+    if (isExcludedFromDelayedTop(row.estado)) return;
+
     const age = getStatusAgeDays(row, now);
     if (age === null) return;
 
@@ -515,6 +517,11 @@ function renderStaleExpedientes(rows, now) {
         )
         .join("")
     : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
+}
+
+function isExcludedFromDelayedTop(status) {
+  const normalized = cleanText(status).toLowerCase();
+  return normalized.includes("adjudicado") || normalized.includes("dado de baja") || normalized.includes("baja");
 }
 
 function handleStaleExpedienteClick(event) {
