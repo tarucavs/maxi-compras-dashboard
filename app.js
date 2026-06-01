@@ -552,15 +552,7 @@ function handleStaleExpedienteClick(event) {
 }
 
 function getStatusAgeDays(row, now) {
-  const meta = state.statusMeta[row.id];
-  const changedAt = parseMetaDate(meta && meta.changedAt);
-  let since = null;
-
-  if (changedAt && meta.currentStatus === row.estado) {
-    since = changedAt;
-  } else {
-    since = row.desdeFecha || row.apertura || null;
-  }
+  const since = row.desdeFecha || null;
 
   if (!since) return null;
 
