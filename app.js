@@ -702,7 +702,7 @@ function renderTable(rows) {
               return '<td class="status-cell">' + statusSelectHtml(row) + "</td>";
             }
             const value = col.value ? col.value(row) : "";
-            return "<td>" + escapeHtml(value) + "</td>";
+            return "<td>" + highlightMatch(value, tableSearch) + "</td>";
           });
           return "<tr>" + cells.join("") + "</tr>";
         })
@@ -726,6 +726,14 @@ function matchesTableSearch(row, query) {
     .join(" ")
     .toLowerCase()
     .includes(query);
+}
+
+function highlightMatch(value, query) {
+  const text = value === null || value === undefined ? "" : String(value);
+  if (!query) return escapeHtml(text);
+
+  const pattern = new RegExp("(" + escapeRegExp(query) + ")", "ig");
+  return escapeHtml(text).replace(pattern, '<mark class="table-hit">$1</mark>');
 }
 
 function statusSelectHtml(row) {
@@ -976,6 +984,10 @@ function sentenceCase(value) {
 function cleanText(value) {
   if (value === null || value === undefined) return "";
   return String(value).replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function escapeHtml(value) {
