@@ -4,6 +4,7 @@ const GOOGLE_REFRESH_MS = 30 * 1000;
 
 const STORAGE_KEYS = {
   statuses: "compras_dashboard_status_overrides_v2",
+  statusMeta: "compras_dashboard_status_meta_v1",
   kpis: "compras_dashboard_selected_kpis_v2",
   columns: "compras_dashboard_selected_columns_v1",
   filters: "compras_dashboard_filters_v1",
@@ -41,6 +42,7 @@ const state = {
   selectedKpis: new Set(loadStoredSelection(STORAGE_KEYS.kpis, KPI_DEFS.map((k) => k.key))),
   selectedColumns: new Set(loadStoredSelection(STORAGE_KEYS.columns, DEFAULT_COLUMNS)),
   statusOverrides: loadStoredStatuses(),
+  statusMeta: loadStoredStatusMeta(),
   selectedFilters: loadStoredFilters(),
   charts: {
     status: null,
@@ -63,6 +65,10 @@ const dom = {
   timelineRange: document.getElementById("timelineRange"),
   chartTopN: document.getElementById("chartTopN"),
   searchInput: document.getElementById("searchInput"),
+  statusChangedToday: document.getElementById("statusChangedToday"),
+  statusStale30: document.getElementById("statusStale30"),
+  statusCritical60: document.getElementById("statusCritical60"),
+  statusAvgAge: document.getElementById("statusAvgAge"),
   tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
@@ -107,6 +113,7 @@ function init() {
 
   renderKpiSelector();
   renderColumnSelector();
+  renderStatusSignals([]);
 
   loadPreferredSource();
   setInterval(() => {
@@ -415,8 +422,83 @@ function applyFilters() {
   });
 
   renderKpis(state.filteredRows);
+  renderStatusSignals(state.rawRows);
   renderTable(state.filteredRows);
   renderCharts(state.filteredRows);
+}
+
+function renderStatusSignals(rows) {
+  if (!dom.statusChangedToday || !dom.statusStale30 || !dom.statusCritical60 || !dom.statusAvgAge) return;
+
+  const now = new Date();
+  const changedTodayExpedientes = new Set();
+  const ages = [];
+  let stale30 = 0;
+  let critical60 = 0;
+
+  rows.forEach((row) => {
+    const meta = state.statusMeta[row.id];
+    const changedAt = parseMetaDate(meta && meta.changedAt);
+
+    if (changedAt && meta.currentStatus === row.estado && isSameLocalDay(changedAt, now)) {
+      changedTodayExpedientes.add(getExpedienteKey(row));
+    }
+
+    const age = getStatusAgeDays(row, now);
+    if (age === null) return;
+
+    ages.push(age);
+    if (age >= 30) stale30 += 1;
+    if (age >= 60) critical60 += 1;
+  });
+
+  const avgAge = ages.length ? ages.reduce((acc, v) => acc + v, 0) / ages.length : 0;
+
+  dom.statusChangedToday.textContent = formatInt.format(changedTodayExpedientes.size);
+  dom.statusStale30.textContent = formatInt.format(stale30);
+  dom.statusCritical60.textContent = formatInt.format(critical60);
+  dom.statusAvgAge.textContent = avgAge.toFixed(1);
+}
+
+function getStatusAgeDays(row, now) {
+  const meta = state.statusMeta[row.id];
+  const changedAt = parseMetaDate(meta && meta.changedAt);
+  let since = null;
+
+  if (changedAt && meta.currentStatus === row.estado) {
+    since = changedAt;
+  } else {
+    since = row.desdeFecha || row.apertura || null;
+  }
+
+  if (!since) return null;
+
+  const sinceStart = startOfDay(since);
+  const nowStart = startOfDay(now);
+  const days = Math.floor((nowStart.getTime() - sinceStart.getTime()) / (1000 * 60 * 60 * 24));
+  return Number.isFinite(days) && days >= 0 ? days : null;
+}
+
+function getExpedienteKey(row) {
+  return cleanText(row.expediente) || row.id;
+}
+
+function parseMetaDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function isSameLocalDay(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 function populateFilters(rows) {
@@ -757,9 +839,18 @@ function handleStatusChange(event) {
   const row = state.rawRows.find((item) => item.id === rowId);
   if (!row) return;
 
+  const previousStatus = cleanText(row.estado) || "Sin estado";
+  if (previousStatus === newStatus) return;
+
   row.estado = newStatus;
   state.statusOverrides[rowId] = newStatus;
+  state.statusMeta[rowId] = {
+    changedAt: new Date().toISOString(),
+    previousStatus,
+    currentStatus: newStatus,
+  };
   localStorage.setItem(STORAGE_KEYS.statuses, JSON.stringify(state.statusOverrides));
+  localStorage.setItem(STORAGE_KEYS.statusMeta, JSON.stringify(state.statusMeta));
 
   populateFilters(state.rawRows);
   applyFilters();
@@ -878,6 +969,17 @@ function getStatusOptions() {
 function loadStoredStatuses() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.statuses);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function loadStoredStatusMeta() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.statusMeta);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed : {};

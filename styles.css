@@ -139,6 +139,35 @@ h1 {
   margin-top: 0.85rem;
 }
 
+.status-signals {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.signal-card {
+  border: 1px solid #d8e4ef;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f1f6fb 100%);
+  padding: 0.65rem 0.75rem;
+}
+
+.signal-card p {
+  margin: 0;
+  color: #4f6478;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.signal-card strong {
+  display: block;
+  margin-top: 0.2rem;
+  color: #143756;
+  font-size: 1.1rem;
+}
+
 .upload-card {
   padding: 1.4rem;
   display: flex;
@@ -588,6 +617,10 @@ th {
 }
 
 @media (max-width: 680px) {
+  .status-signals {
+    grid-template-columns: 1fr;
+  }
+
   .kpi-grid {
     grid-template-columns: 1fr;
   }
