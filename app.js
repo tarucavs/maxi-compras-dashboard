@@ -363,7 +363,8 @@ function parseWorkbook(arrayBuffer) {
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
   const firstSheet = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheet];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: false });
+  // Usa valores crudos para conservar fechas/seriales y parsearlos de forma controlada.
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: true });
   ingestRows(rows);
 }
 
@@ -387,27 +388,46 @@ function ingestRows(rows) {
 }
 
 function normalizeRow(row) {
-  const estimated = parseNumber(row["ESTIMADO SIN IVA"]);
-  const statusRaw = cleanText(row["Unnamed: 11"]) || cleanText(row["OBSERVACIONES"]);
-  const solped = cleanText(row.SOLPED);
-  const proceso = cleanText(row["Nº PROCESO"]);
-  const expediente = cleanText(row["Nº EXPEDIENTE"]);
+  const estimated = parseNumber(getRowValue(row, ["ESTIMADO SIN IVA", "ESTIMADO"]));
+  const statusRaw = cleanText(getRowValue(row, ["UNNAMED: 11", "ESTADO", "OBSERVACIONES"]));
+  const solped = cleanText(getRowValue(row, ["SOLPED"]));
+  const proceso = cleanText(getRowValue(row, ["Nº PROCESO", "NRO PROCESO", "PROCESO"]));
+  const expediente = cleanText(getRowValue(row, ["Nº EXPEDIENTE", "NRO EXPEDIENTE", "EXPEDIENTE"]));
 
   return {
     id: buildRowId(solped, proceso, expediente),
     solped,
-    objeto: cleanText(row.OBJETO),
+    objeto: cleanText(getRowValue(row, ["OBJETO"])),
     proceso,
     expediente,
     estimado: estimated,
-    observaciones: cleanText(row.OBSERVACIONES),
-    apertura: parseDate(row.APERTURA),
-    desdeFecha: parseDate(row["DESDE (FECHA)"]),
-    comprador: cleanText(row.COMPRADOR) || "Sin comprador",
-    fabrica: cleanText(row["FÁBRICA"]) || "Sin fabrica",
+    observaciones: cleanText(getRowValue(row, ["OBSERVACIONES"])),
+    apertura: parseDate(getRowValue(row, ["APERTURA"])),
+    // La demora debe salir de DESDE (FECHA).
+    desdeFecha: parseDate(getRowValue(row, ["DESDE (FECHA)", "DESDE FECHA", "DESDE"])),
+    comprador: cleanText(getRowValue(row, ["COMPRADOR"])) || "Sin comprador",
+    fabrica: cleanText(getRowValue(row, ["FÁBRICA", "FABRICA"])) || "Sin fabrica",
     estado: normalizeStatus(statusRaw),
-    oc: cleanText(row.OC),
+    oc: cleanText(getRowValue(row, ["OC"])),
   };
+}
+
+function getRowValue(row, aliases) {
+  const keys = Object.keys(row || {});
+  const normalizedMap = new Map(keys.map((key) => [normalizeHeaderKey(key), key]));
+
+  for (const alias of aliases) {
+    const hit = normalizedMap.get(normalizeHeaderKey(alias));
+    if (hit !== undefined) return row[hit];
+  }
+  return null;
+}
+
+function normalizeHeaderKey(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
 }
 
 function applyFilters() {
@@ -1147,6 +1167,13 @@ function parseNumber(value) {
 function parseDate(value) {
   if (!value) return null;
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Serial de Excel: dias desde 1899-12-30.
+    const ms = Date.UTC(1899, 11, 30) + value * 86400000;
+    const dt = new Date(ms);
+    return isNaN(dt.getTime()) ? null : new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+  }
 
   const text = String(value).trim();
   if (!text) return null;
