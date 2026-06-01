@@ -39,6 +39,8 @@ const DEFAULT_COLUMNS = ["solped", "objeto", "proceso", "comprador", "fabrica", 
 const state = {
   rawRows: [],
   filteredRows: [],
+  selectedStatusFromChart: null,
+  statusChartTopLabels: [],
   selectedKpis: new Set(loadStoredSelection(STORAGE_KEYS.kpis, KPI_DEFS.map((k) => k.key))),
   selectedColumns: new Set(loadStoredSelection(STORAGE_KEYS.columns, DEFAULT_COLUMNS)),
   statusOverrides: loadStoredStatuses(),
@@ -70,6 +72,8 @@ const dom = {
   statusCritical60: document.getElementById("statusCritical60"),
   statusAvgAge: document.getElementById("statusAvgAge"),
   staleExpedientesList: document.getElementById("staleExpedientesList"),
+  selectedStatusTitle: document.getElementById("selectedStatusTitle"),
+  selectedStatusList: document.getElementById("selectedStatusList"),
   tableSearchInput: document.getElementById("tableSearchInput"),
   buyerFilterOptions: document.getElementById("buyerFilterOptions"),
   factoryFilterOptions: document.getElementById("factoryFilterOptions"),
@@ -115,6 +119,7 @@ function init() {
   renderKpiSelector();
   renderColumnSelector();
   renderStatusSignals([]);
+  renderSelectedStatusExpedientes([], null);
 
   loadPreferredSource();
   setInterval(() => {
@@ -957,6 +962,9 @@ function renderCharts(rows) {
 
   const byStatusCountRaw = countBy(rows, (r) => r.estado || "Sin estado");
   const byStatusCount = toTopNWithOthers(byStatusCountRaw, topN);
+  const statusLabels = Object.keys(byStatusCount);
+
+  state.statusChartTopLabels = statusLabels.filter((label) => label !== "Otros");
 
   const byMonthAll = countBy(rows, (r) => {
     const d = r.desdeFecha || r.apertura;
@@ -969,15 +977,37 @@ function renderCharts(rows) {
   const monthLabels =
     rangeValue === "all" ? monthLabelsAll : monthLabelsAll.slice(-Number(rangeValue || "12"));
 
-  state.charts.status = drawChart(state.charts.status, "statusChart", "doughnut", {
-    labels: Object.keys(byStatusCount),
-    datasets: [
-      {
-        data: Object.values(byStatusCount),
-        backgroundColor: ["#0f766e", "#f77f00", "#7c3aed", "#dc2626", "#2563eb", "#4b5563"],
+  state.charts.status = drawChart(
+    state.charts.status,
+    "statusChart",
+    "doughnut",
+    {
+      labels: statusLabels,
+      datasets: [
+        {
+          data: Object.values(byStatusCount),
+          backgroundColor: ["#0f766e", "#f77f00", "#7c3aed", "#dc2626", "#2563eb", "#4b5563"],
+        },
+      ],
+    },
+    {
+      onClick: (_event, elements, chart) => {
+        if (!elements || !elements.length) {
+          state.selectedStatusFromChart = null;
+          renderSelectedStatusExpedientes(state.rawRows, null);
+          return;
+        }
+
+        const index = elements[0].index;
+        const clickedLabel = chart?.data?.labels?.[index];
+        if (!clickedLabel) return;
+
+        state.selectedStatusFromChart =
+          state.selectedStatusFromChart === clickedLabel ? null : String(clickedLabel);
+        renderSelectedStatusExpedientes(state.rawRows, state.selectedStatusFromChart);
       },
-    ],
-  });
+    }
+  );
 
   if (state.charts.amount) {
     state.charts.amount.destroy();
@@ -997,6 +1027,8 @@ function renderCharts(rows) {
       },
     ],
   });
+
+  renderSelectedStatusExpedientes(state.rawRows, state.selectedStatusFromChart);
 }
 
 function toTopNWithOthers(dict, topN) {
@@ -1012,40 +1044,97 @@ function toTopNWithOthers(dict, topN) {
   return Object.fromEntries([...top, ["Otros", othersValue]]);
 }
 
-function drawChart(oldChart, canvasId, type, data) {
+function drawChart(oldChart, canvasId, type, data, optionOverrides = {}) {
   if (oldChart) {
     oldChart.destroy();
   }
 
+  const baseOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        labels: {
+          font: { family: "Space Grotesk" },
+        },
+      },
+    },
+    scales:
+      type === "doughnut"
+        ? undefined
+        : {
+            x: {
+              ticks: { color: "#4a5c6f" },
+              grid: { color: "rgba(0,0,0,0.05)" },
+            },
+            y: {
+              ticks: { color: "#4a5c6f" },
+              grid: { color: "rgba(0,0,0,0.05)" },
+            },
+          },
+  };
+
   return new Chart(document.getElementById(canvasId), {
     type,
     data,
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: true,
-          labels: {
-            font: { family: "Space Grotesk" },
-          },
-        },
-      },
-      scales:
-        type === "doughnut"
-          ? undefined
-          : {
-              x: {
-                ticks: { color: "#4a5c6f" },
-                grid: { color: "rgba(0,0,0,0.05)" },
-              },
-              y: {
-                ticks: { color: "#4a5c6f" },
-                grid: { color: "rgba(0,0,0,0.05)" },
-              },
-            },
-    },
+    options: Object.assign({}, baseOptions, optionOverrides),
   });
+}
+
+function renderSelectedStatusExpedientes(rows, selectedStatus) {
+  if (!dom.selectedStatusTitle || !dom.selectedStatusList) return;
+
+  if (!selectedStatus) {
+    dom.selectedStatusTitle.textContent = "Expedientes por estado (haz click en la torta)";
+    dom.selectedStatusList.innerHTML =
+      '<li class="selected-status-empty">Haz click en un estado del grafico para ver sus expedientes aqui.</li>';
+    return;
+  }
+
+  const selectedRows = getRowsForChartStatus(rows, selectedStatus);
+  const byExpediente = new Map();
+
+  selectedRows.forEach((row) => {
+    const expediente = cleanText(row.expediente) || "Sin expediente";
+    const key = expediente + "|" + cleanText(row.proceso);
+    if (byExpediente.has(key)) return;
+    byExpediente.set(key, {
+      expediente,
+      proceso: cleanText(row.proceso) || "Sin proceso",
+      comprador: cleanText(row.comprador) || "Sin comprador",
+    });
+  });
+
+  const items = [...byExpediente.values()].slice(0, 120);
+  dom.selectedStatusTitle.textContent =
+    'Expedientes en estado "' + selectedStatus + '" (' + formatInt.format(items.length) + ")";
+
+  dom.selectedStatusList.innerHTML = items.length
+    ? items
+        .map(
+          (item) =>
+            '<li class="selected-status-item">' +
+            "<strong>" +
+            escapeHtml(item.expediente) +
+            "</strong>" +
+            "<span>" +
+            escapeHtml(item.proceso) +
+            " | " +
+            escapeHtml(item.comprador) +
+            "</span></li>"
+        )
+        .join("")
+    : '<li class="selected-status-empty">No se encontraron expedientes para ese estado.</li>';
+}
+
+function getRowsForChartStatus(rows, selectedStatus) {
+  if (selectedStatus !== "Otros") {
+    return rows.filter((row) => (row.estado || "Sin estado") === selectedStatus);
+  }
+
+  const topSet = new Set(state.statusChartTopLabels || []);
+  return rows.filter((row) => !topSet.has(row.estado || "Sin estado"));
 }
 
 function countBy(rows, accessor) {

@@ -565,6 +565,59 @@ button:hover {
   align-items: stretch;
 }
 
+.selected-status-card {
+  margin-top: 0.85rem;
+}
+
+.selected-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.selected-status-head h3 {
+  margin: 0;
+}
+
+.selected-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.selected-status-item {
+  border: 1px solid #e1e8ef;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: #fbfdff;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.selected-status-item strong {
+  color: #173b5b;
+  font-size: 0.88rem;
+}
+
+.selected-status-item span {
+  color: #5a7288;
+  font-size: 0.78rem;
+}
+
+.selected-status-empty {
+  border: 1px dashed #d5e0ea;
+  border-radius: 10px;
+  padding: 0.6rem;
+  color: #5a7288;
+  background: #fff;
+}
+
 .wide {
   grid-column: 1 / -1;
 }
