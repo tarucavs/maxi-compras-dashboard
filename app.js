@@ -1,10 +1,12 @@
 const FALLBACK_FILE_NAME = "SEGUIMIENTOS COMPRAS FABRICACIONES MILITARES (10).xlsx";
 const GOOGLE_SHEETS_EDIT_URL = "https://docs.google.com/spreadsheets/d/1kFaKvilRf1z97XC15fAMYgS9l0cPq4bC-UF7VRVR9_U/edit?gid=0#gid=0";
 const GOOGLE_REFRESH_MS = 30 * 1000;
+const STATUS_META_SCHEMA_VERSION = "2";
 
 const STORAGE_KEYS = {
   statuses: "compras_dashboard_status_overrides_v2",
   statusMeta: "compras_dashboard_status_meta_v1",
+  statusMetaSchema: "compras_dashboard_status_meta_schema_v1",
   kpis: "compras_dashboard_selected_kpis_v2",
   columns: "compras_dashboard_selected_columns_v1",
   filters: "compras_dashboard_filters_v1",
@@ -119,6 +121,7 @@ function init() {
   renderKpiSelector();
   renderColumnSelector();
   renderStatusSignals([]);
+  migrateStatusMetaIfNeeded();
 
   loadPreferredSource();
   setInterval(() => {
@@ -383,7 +386,7 @@ function ingestRows(rows) {
     // ultima modificacion conocida del estado.
     const knownMeta = state.statusMeta[row.id];
     const knownChangedAt = parseMetaDate(knownMeta && knownMeta.changedAt);
-    const baseChangedAt = row.desdeFecha || row.apertura || null;
+    const baseChangedAt = new Date();
 
     if (!knownMeta || knownMeta.currentStatus !== row.estado || !knownChangedAt) {
       state.statusMeta[row.id] = {
@@ -1118,6 +1121,19 @@ function loadStoredStatusMeta() {
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch (_error) {
     return {};
+  }
+}
+
+function migrateStatusMetaIfNeeded() {
+  try {
+    const savedSchema = localStorage.getItem(STORAGE_KEYS.statusMetaSchema);
+    if (savedSchema === STATUS_META_SCHEMA_VERSION) return;
+
+    state.statusMeta = {};
+    localStorage.setItem(STORAGE_KEYS.statusMeta, JSON.stringify(state.statusMeta));
+    localStorage.setItem(STORAGE_KEYS.statusMetaSchema, STATUS_META_SCHEMA_VERSION);
+  } catch (_error) {
+    // Si falla storage, continua sin bloquear la carga del dashboard.
   }
 }
 
