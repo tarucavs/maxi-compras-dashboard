@@ -355,7 +355,7 @@ function parseCsv(csvText) {
   const workbook = XLSX.read(csvText, { type: "string" });
   const firstSheet = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheet];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: false });
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: null, raw: true });
   ingestRows(rows);
 }
 
@@ -403,8 +403,8 @@ function normalizeRow(row) {
     estimado: estimated,
     observaciones: cleanText(getRowValue(row, ["OBSERVACIONES"])),
     apertura: parseDate(getRowValue(row, ["APERTURA"])),
-    // La demora debe salir de DESDE (FECHA).
-    desdeFecha: parseDate(getRowValue(row, ["DESDE (FECHA)", "DESDE FECHA", "DESDE"])),
+    // La demora debe salir de la columna DESDE (FECHA), sin tomar otras columnas "DESDE".
+    desdeFecha: parseDate(getDesdeFechaValue(row)),
     comprador: cleanText(getRowValue(row, ["COMPRADOR"])) || "Sin comprador",
     fabrica: cleanText(getRowValue(row, ["FÁBRICA", "FABRICA"])) || "Sin fabrica",
     estado: normalizeStatus(statusRaw),
@@ -420,6 +420,19 @@ function getRowValue(row, aliases) {
     const hit = normalizedMap.get(normalizeHeaderKey(alias));
     if (hit !== undefined) return row[hit];
   }
+  return null;
+}
+
+function getDesdeFechaValue(row) {
+  const keys = Object.keys(row || {});
+
+  for (const key of keys) {
+    const normalized = normalizeHeaderKey(key);
+    if (normalized.includes("DESDE") && normalized.includes("FECHA")) {
+      return row[key];
+    }
+  }
+
   return null;
 }
 
@@ -1178,10 +1191,19 @@ function parseDate(value) {
   const text = String(value).trim();
   if (!text) return null;
 
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (Number.isFinite(serial) && serial > 1000 && serial < 80000) {
+      const ms = Date.UTC(1899, 11, 30) + serial * 86400000;
+      const dt = new Date(ms);
+      return isNaN(dt.getTime()) ? null : new Date(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate());
+    }
+  }
+
   const nativeDate = new Date(text);
   if (!isNaN(nativeDate.getTime())) return nativeDate;
 
-  const parts = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  const parts = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
   if (parts) {
     const dd = Number(parts[1]);
     const mm = Number(parts[2]) - 1;
