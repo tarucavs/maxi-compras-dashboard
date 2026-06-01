@@ -485,12 +485,23 @@ function renderBuyerCounts(rows) {
 
   const counts = rows.reduce((acc, row) => {
     const buyer = cleanText(row.comprador) || "Sin comprador";
-    acc[buyer] = (acc[buyer] || 0) + 1;
+    const expediente = cleanText(row.expediente) || row.id;
+    if (!acc[buyer]) {
+      acc[buyer] = new Set();
+    }
+    if (expediente) {
+      acc[buyer].add(expediente);
+    }
     return acc;
   }, {});
 
-  const items = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  dom.buyerStatsSummary.textContent = formatInt.format(items.length) + " compradores";
+  const items = Object.entries(counts)
+    .map(([buyer, expedientes]) => [buyer, expedientes.size])
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+
+  const totalExpedientes = items.reduce((acc, [, count]) => acc + count, 0);
+  dom.buyerStatsSummary.textContent =
+    formatInt.format(items.length) + " compradores | " + formatInt.format(totalExpedientes) + " expedientes";
 
   dom.buyerCountsList.innerHTML = items.length
     ? items
@@ -500,6 +511,9 @@ function renderBuyerCounts(rows) {
             '<span class="buyer-count-name">' +
             escapeHtml(buyer) +
             '</span>' +
+            '<span class="buyer-count-meta">' +
+            formatInt.format(count) +
+            ' expedientes</span>' +
             '<strong class="buyer-count-value">' +
             formatInt.format(count) +
             '</strong></li>'
