@@ -378,7 +378,23 @@ function ingestRows(rows) {
     if (override) {
       row.estado = override;
     }
+
+    // Inicializa/actualiza la fecha base de estado para contar demoras desde la
+    // ultima modificacion conocida del estado.
+    const knownMeta = state.statusMeta[row.id];
+    const knownChangedAt = parseMetaDate(knownMeta && knownMeta.changedAt);
+    const baseChangedAt = row.desdeFecha || row.apertura || null;
+
+    if (!knownMeta || knownMeta.currentStatus !== row.estado || !knownChangedAt) {
+      state.statusMeta[row.id] = {
+        changedAt: (baseChangedAt || new Date()).toISOString(),
+        previousStatus: knownMeta && knownMeta.currentStatus ? knownMeta.currentStatus : null,
+        currentStatus: row.estado,
+      };
+    }
   });
+
+  localStorage.setItem(STORAGE_KEYS.statusMeta, JSON.stringify(state.statusMeta));
 
   populateFilters(state.rawRows);
   applyFilters();
@@ -585,7 +601,8 @@ function handleStaleExpedienteClick(event) {
 }
 
 function getStatusAgeDays(row, now) {
-  const since = row.desdeFecha || null;
+  const meta = state.statusMeta[row.id];
+  const since = parseMetaDate(meta && meta.changedAt);
 
   if (!since) return null;
 
