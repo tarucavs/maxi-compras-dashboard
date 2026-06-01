@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel de Compras | Fabricaciones Militares</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+
+    <header class="hero">
+      <div class="hero-copy">
+        <div class="brand-row">
+          <div class="brand-meta">
+            <span>Tablero de Compras en 3 pasos</span>
+            <p>Actualizar datos, aplicar filtros y revisar KPI para decidir rapido.</p>
+          </div>
+        </div>
+        <p class="eyebrow">Dashboard Ejecutivo</p>
+        <h1>Seguimiento de Compras</h1>
+        <p class="hero-sub">
+          Vista profesional de procesos, montos y desempeno para decisiones rapidas.
+          Carga tu Excel y obten indicadores KPI automaticamente.
+        </p>
+      </div>
+      <div class="upload-card">
+        <h2>Fuente de datos</h2>
+        <p>Se actualiza desde Google Sheets (online) y usa archivo local como respaldo.</p>
+        <button id="refreshOnlineBtn" type="button">Actualizar desde Google Sheets</button>
+        <small id="dataSourceInfo" class="source-badge">Fuente actual: sin datos</small>
+        <input id="excelFile" type="file" accept=".xlsx,.xls,.csv" />
+        <button id="loadDefaultBtn" type="button" class="secondary-btn">Cargar archivo local (respaldo)</button>
+        <small id="loadHint">Actualizacion automatica cada 30 segundos. Si no aparece, usa el selector de archivo.</small>
+      </div>
+    </header>
+
+    <main id="dashboard" class="dashboard hidden">
+      <div class="layout-grid">
+        <aside class="controls-panel">
+          <section class="guide card">
+            <h3>Guia rapida</h3>
+            <p>1) Actualiza desde Google. 2) Filtra. 3) Edita estado. 4) Elige KPI y columnas.</p>
+          </section>
+
+          <section class="filters card">
+            <h3>Filtros</h3>
+            <div class="filters-col">
+              <div class="filter-field">
+                <label for="searchInput">Busqueda general</label>
+                <input id="searchInput" type="text" placeholder="Objeto, proceso, expediente o Solped" />
+              </div>
+
+              <details class="filter-picker" open>
+                <summary>Compradores <span id="buyerFilterCount" class="count-pill">Todos</span></summary>
+                <div id="buyerFilterOptions" class="filter-options"></div>
+              </details>
+
+              <details class="filter-picker" open>
+                <summary>Fabricas <span id="factoryFilterCount" class="count-pill">Todas</span></summary>
+                <div id="factoryFilterOptions" class="filter-options"></div>
+              </details>
+
+              <details class="filter-picker" open>
+                <summary>Estados <span id="statusFilterCount" class="count-pill">Todos</span></summary>
+                <div id="statusFilterOptions" class="filter-options"></div>
+              </details>
+
+              <button id="clearFiltersBtn" type="button" class="secondary-btn">Limpiar filtros</button>
+            </div>
+          </section>
+
+          <section class="kpi-controls card">
+            <h3>KPIs visibles</h3>
+            <details id="kpiPicker" class="kpi-picker" open>
+              <summary>Seleccionar indicadores</summary>
+              <div id="kpiOptions" class="kpi-options"></div>
+            </details>
+          </section>
+
+          <section class="column-controls card">
+            <h3>Columnas de tabla</h3>
+            <details id="columnPicker" class="kpi-picker" open>
+              <summary>Seleccionar columnas</summary>
+              <div id="columnOptions" class="kpi-options"></div>
+            </details>
+          </section>
+        </aside>
+
+        <section class="content-panel">
+          <section class="kpi-grid" id="kpiGrid"></section>
+
+          <section class="chart-toolbar card">
+            <div class="filter-field">
+              <label for="timelineRange">Rango de tiempo</label>
+              <select id="timelineRange">
+                <option value="12">Ultimos 12 meses</option>
+                <option value="24">Ultimos 24 meses</option>
+                <option value="all">Todo</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="chartTopN">Top categorias</label>
+              <select id="chartTopN">
+                <option value="5">Top 5</option>
+                <option value="8" selected>Top 8</option>
+                <option value="12">Top 12</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="charts-grid">
+            <article class="card">
+              <h3>Procesos por estado</h3>
+              <canvas id="statusChart"></canvas>
+            </article>
+            <article class="card">
+              <h3>Monto por estado</h3>
+              <canvas id="amountChart"></canvas>
+            </article>
+            <article class="card wide">
+              <h3>Evolucion mensual</h3>
+              <canvas id="timelineChart"></canvas>
+            </article>
+          </section>
+
+          <section class="table-section card">
+            <div class="table-head">
+              <h3>Detalle de procesos</h3>
+              <span id="rowsInfo"></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <section id="emptyState" class="empty-state">
+      <h2>Listo para empezar</h2>
+      <p>
+        Carga el Excel para ver un panel moderno con KPI, graficos y tabla de seguimiento.
+      </p>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
