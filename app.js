@@ -471,15 +471,18 @@ function renderStaleExpedientes(rows, now) {
   if (!dom.staleExpedientesList) return;
 
   const byExpediente = new Map();
+  const excludedExpedientes = new Set(
+    rows.filter((row) => isExcludedFromDelayedTop(row.estado)).map((row) => getExpedienteKey(row))
+  );
 
   rows.forEach((row) => {
-    if (isExcludedFromDelayedTop(row.estado)) return;
+    if (excludedExpedientes.has(getExpedienteKey(row))) return;
 
     const age = getStatusAgeDays(row, now);
     if (age === null) return;
 
     const expediente = cleanText(row.expediente);
-    const key = expediente || row.id;
+    const key = getExpedienteKey(row);
     const current = byExpediente.get(key);
 
     if (!current || age > current.ageDays) {
