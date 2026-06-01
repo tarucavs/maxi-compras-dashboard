@@ -442,6 +442,8 @@ function renderStatusSignals(rows) {
   let critical60 = 0;
 
   rows.forEach((row) => {
+    if (isClosedStatus(row.estado)) return;
+
     const meta = state.statusMeta[row.id];
     const changedAt = parseMetaDate(meta && meta.changedAt);
 
@@ -471,9 +473,7 @@ function renderStaleExpedientes(rows, now) {
   if (!dom.staleExpedientesList) return;
 
   const byExpediente = new Map();
-  const excludedExpedientes = new Set(
-    rows.filter((row) => isExcludedFromDelayedTop(row.estado)).map((row) => getExpedienteKey(row))
-  );
+  const excludedExpedientes = new Set(rows.filter((row) => isClosedStatus(row.estado)).map((row) => getExpedienteKey(row)));
 
   rows.forEach((row) => {
     if (excludedExpedientes.has(getExpedienteKey(row))) return;
@@ -522,9 +522,16 @@ function renderStaleExpedientes(rows, now) {
     : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
 }
 
-function isExcludedFromDelayedTop(status) {
+function isClosedStatus(status) {
   const normalized = cleanText(status).toLowerCase();
-  return normalized.includes("adjudicado") || normalized.includes("dado de baja") || normalized.includes("baja");
+  return (
+    normalized.includes("adjudicado") ||
+    normalized.includes("dado de baja") ||
+    normalized.includes("baja") ||
+    normalized.includes("cancelad") ||
+    normalized.includes("desestimad") ||
+    normalized.includes("cerrad")
+  );
 }
 
 function handleStaleExpedienteClick(event) {
