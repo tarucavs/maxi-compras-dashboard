@@ -219,6 +219,34 @@ h1 {
   gap: 0.1rem;
 }
 
+.status-alert-link {
+  appearance: none;
+  width: auto;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  background: transparent;
+  color: #1a3b59;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  box-shadow: none;
+}
+
+.status-alert-link:hover {
+  transform: none;
+  box-shadow: none;
+  color: #0b4f8a;
+}
+
+.status-alert-link:focus-visible {
+  outline: 2px solid #0b4f8a;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .status-alert-main strong {
   font-size: 0.84rem;
   color: #1a3b59;

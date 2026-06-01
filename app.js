@@ -106,6 +106,10 @@ function init() {
     dom.tableSearchInput.addEventListener("input", () => renderTable(state.filteredRows));
   }
 
+  if (dom.staleExpedientesList) {
+    dom.staleExpedientesList.addEventListener("click", handleStaleExpedienteClick);
+  }
+
   [dom.timelineRange, dom.chartTopN].forEach((el) => {
     el.addEventListener("change", () => renderCharts(state.filteredRows));
   });
@@ -494,9 +498,11 @@ function renderStaleExpedientes(rows, now) {
           (item) =>
             '<li class="status-alert-item">' +
             '<div class="status-alert-main">' +
-            '<strong>' +
+            '<button type="button" class="status-alert-link" data-expediente-filter="' +
             escapeHtml(item.expediente) +
-            "</strong>" +
+            '">' +
+            escapeHtml(item.expediente) +
+            "</button>" +
             '<span class="status-alert-meta">' +
             escapeHtml(item.proceso) +
             " | " +
@@ -509,6 +515,23 @@ function renderStaleExpedientes(rows, now) {
         )
         .join("")
     : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
+}
+
+function handleStaleExpedienteClick(event) {
+  const trigger = event.target.closest("button[data-expediente-filter]");
+  if (!trigger) return;
+
+  const expediente = cleanText(trigger.dataset.expedienteFilter);
+  if (!expediente) return;
+
+  dom.searchInput.value = expediente;
+  if (dom.tableSearchInput) {
+    dom.tableSearchInput.value = expediente;
+  }
+
+  applyFilters();
+  dom.tableSearchInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+  dom.tableSearchInput?.focus();
 }
 
 function getStatusAgeDays(row, now) {
