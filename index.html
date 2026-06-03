@@ -31,30 +31,19 @@
           Vista profesional de procesos, montos y desempeno para decisiones rapidas.
           Carga tu Excel y obten indicadores KPI automaticamente.
         </p>
-        <section class="status-signals" aria-label="Indicadores de estado de expedientes">
-          <article class="signal-card">
-            <p>Expedientes con cambio hoy</p>
-            <strong id="statusChangedToday">0</strong>
-          </article>
-          <article class="signal-card">
-            <p>Expedientes +30 dias en estado</p>
-            <strong id="statusStale30">0</strong>
-          </article>
-          <article class="signal-card">
-            <p>Expedientes criticos (+60 dias)</p>
-            <strong id="statusCritical60">0</strong>
-          </article>
-          <article class="signal-card">
-            <p>Promedio dias sin cambio</p>
-            <strong id="statusAvgAge">0</strong>
-          </article>
-        </section>
-        <section class="status-alerts" aria-label="Expedientes demorados">
-          <div class="status-alerts-head">
-            <h3>Top 5 expedientes mas demorados</h3>
-            <small>Ordenados por dias sin cambio de estado</small>
+        <section class="ops-priority" aria-label="Top 10 para gestionar hoy">
+          <div class="ops-head">
+            <h3>Top 10 para gestionar hoy</h3>
+            <small>Priorizado por dias sin cambio y monto estimado</small>
           </div>
-          <ul id="staleExpedientesList" class="status-alerts-list"></ul>
+          <ol id="priorityTopList" class="priority-top-list"></ol>
+        </section>
+        <section class="ops-sla" aria-label="SLA por comprador">
+          <div class="ops-head">
+            <h3>SLA por comprador</h3>
+            <small>Semaforo por promedio de dias sin movimiento</small>
+          </div>
+          <ul id="buyerSlaList" class="buyer-sla-list"></ul>
         </section>
       </div>
       <div class="upload-card">
@@ -191,6 +180,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-    <script src="app.v20260603b.js"></script>
+    <script src="app.js?v=20260603d"></script>
   </body>
 </html>

@@ -67,11 +67,8 @@ const dom = {
   timelineRange: document.getElementById("timelineRange"),
   chartTopN: document.getElementById("chartTopN"),
   searchInput: document.getElementById("searchInput"),
-  statusChangedToday: document.getElementById("statusChangedToday"),
-  statusStale30: document.getElementById("statusStale30"),
-  statusCritical60: document.getElementById("statusCritical60"),
-  statusAvgAge: document.getElementById("statusAvgAge"),
-  staleExpedientesList: document.getElementById("staleExpedientesList"),
+  priorityTopList: document.getElementById("priorityTopList"),
+  buyerSlaList: document.getElementById("buyerSlaList"),
   selectedStatusTitle: document.getElementById("selectedStatusTitle"),
   selectedStatusList: document.getElementById("selectedStatusList"),
   tableSearchInput: document.getElementById("tableSearchInput"),
@@ -473,48 +470,19 @@ function applyFilters() {
   });
 
   renderKpis(state.filteredRows);
-  renderStatusSignals(state.rawRows);
+  renderStatusSignals(state.filteredRows);
   renderTable(state.filteredRows);
   renderCharts(state.filteredRows);
 }
 
 function renderStatusSignals(rows) {
-  if (!dom.statusChangedToday || !dom.statusStale30 || !dom.statusCritical60 || !dom.statusAvgAge) return;
-
   const now = new Date();
-  const changedTodayExpedientes = new Set();
-  const ages = [];
-  let stale30 = 0;
-  let critical60 = 0;
-
-  rows.forEach((row) => {
-    const meta = state.statusMeta[row.id];
-    const changedAt = parseMetaDate(meta && meta.changedAt);
-
-    if (changedAt && meta.currentStatus === row.estado && isSameLocalDay(changedAt, now)) {
-      changedTodayExpedientes.add(getExpedienteKey(row));
-    }
-
-    const age = getStatusAgeDays(row, now);
-    if (age === null) return;
-
-    ages.push(age);
-    if (age >= 30) stale30 += 1;
-    if (age >= 60) critical60 += 1;
-  });
-
-  const avgAge = ages.length ? ages.reduce((acc, v) => acc + v, 0) / ages.length : 0;
-
-  dom.statusChangedToday.textContent = formatInt.format(changedTodayExpedientes.size);
-  dom.statusStale30.textContent = formatInt.format(stale30);
-  dom.statusCritical60.textContent = formatInt.format(critical60);
-  dom.statusAvgAge.textContent = avgAge.toFixed(1);
-
-  renderStaleExpedientes(rows, now);
+  renderPriorityTop(rows, now);
+  renderBuyerSla(rows, now);
 }
 
-function renderStaleExpedientes(rows, now) {
-  if (!dom.staleExpedientesList) return;
+function renderPriorityTop(rows, now) {
+  if (!dom.priorityTopList) return;
 
   const byExpediente = new Map();
 
@@ -522,43 +490,141 @@ function renderStaleExpedientes(rows, now) {
     const age = getStatusAgeDays(row, now);
     if (age === null) return;
 
-    const expediente = cleanText(row.expediente);
-    const key = expediente || row.id;
+    const expediente = cleanText(row.expediente) || "Sin expediente";
+    const proceso = cleanText(row.proceso) || "Sin proceso";
+    const amount = Number.isFinite(row.estimado) ? row.estimado : 0;
+    const key = expediente + "|" + proceso;
     const current = byExpediente.get(key);
 
-    if (!current || age > current.ageDays) {
-      byExpediente.set(key, {
-        expediente: expediente || "Sin expediente",
-        proceso: cleanText(row.proceso) || "Sin proceso",
-        estado: cleanText(row.estado) || "Sin estado",
-        ageDays: age,
-      });
+    const candidate = {
+      expediente,
+      proceso,
+      comprador: cleanText(row.comprador) || "Sin comprador",
+      estado: cleanText(row.estado) || "Sin estado",
+      objeto: cleanText(row.objeto) || "Sin objeto",
+      ageDays: age,
+      estimado: amount,
+      score: age * 1000000000 + amount,
+    };
+
+    if (!current || candidate.score > current.score) {
+      byExpediente.set(key, candidate);
     }
   });
 
-  const top = [...byExpediente.values()].sort((a, b) => b.ageDays - a.ageDays).slice(0, 5);
+  const top = [...byExpediente.values()].sort((a, b) => b.score - a.score).slice(0, 10);
 
-  dom.staleExpedientesList.innerHTML = top.length
+  dom.priorityTopList.innerHTML = top.length
     ? top
         .map(
-          (item) =>
-            '<li class="status-alert-item">' +
-            '<div class="status-alert-main">' +
-            '<strong>' +
+          (item, idx) =>
+            '<li class="priority-top-item">' +
+            '<span class="priority-rank">' +
+            String(idx + 1) +
+            "</span>" +
+            '<div class="priority-main">' +
+            "<strong>" +
             escapeHtml(item.expediente) +
             "</strong>" +
-            '<span class="status-alert-meta">' +
+            "<span>" +
             escapeHtml(item.proceso) +
             " | " +
-            escapeHtml(item.estado) +
+            escapeHtml(item.comprador) +
             "</span>" +
+            '<small class="priority-obj">' +
+            escapeHtml(item.objeto) +
+            "</small>" +
             "</div>" +
-            '<span class="status-alert-age">' +
+            '<div class="priority-badges">' +
+            '<span class="priority-age">' +
             formatInt.format(item.ageDays) +
-            " dias</span></li>"
+            " dias</span>" +
+            '<span class="priority-amount">' +
+            formatMoney.format(item.estimado) +
+            "</span>" +
+            "</div></li>"
         )
         .join("")
-    : '<li class="status-alert-empty">No hay datos suficientes para calcular demoras.</li>';
+    : '<li class="priority-empty">No hay suficientes datos para priorizar.</li>';
+}
+
+function renderBuyerSla(rows, now) {
+  if (!dom.buyerSlaList) return;
+
+  const seen = new Set();
+  const byBuyer = new Map();
+
+  rows.forEach((row) => {
+    const age = getStatusAgeDays(row, now);
+    if (age === null) return;
+
+    const buyer = cleanText(row.comprador) || "Sin comprador";
+    const expedienteKey = getExpedienteKey(row);
+    const uniqueKey = buyer + "|" + expedienteKey;
+    if (seen.has(uniqueKey)) return;
+    seen.add(uniqueKey);
+
+    const current = byBuyer.get(buyer) || {
+      buyer,
+      count: 0,
+      totalAge: 0,
+      maxAge: 0,
+    };
+
+    current.count += 1;
+    current.totalAge += age;
+    current.maxAge = Math.max(current.maxAge, age);
+    byBuyer.set(buyer, current);
+  });
+
+  const items = [...byBuyer.values()]
+    .map((entry) => {
+      const avgAge = entry.count ? entry.totalAge / entry.count : 0;
+      const sla = getSlaLevel(avgAge);
+      return {
+        buyer: entry.buyer,
+        count: entry.count,
+        avgAge,
+        maxAge: entry.maxAge,
+        sla,
+      };
+    })
+    .sort((a, b) => b.avgAge - a.avgAge)
+    .slice(0, 12);
+
+  dom.buyerSlaList.innerHTML = items.length
+    ? items
+        .map(
+          (item) =>
+            '<li class="buyer-sla-item">' +
+            '<div class="buyer-sla-main">' +
+            "<strong>" +
+            escapeHtml(item.buyer) +
+            "</strong>" +
+            "<span>" +
+            formatInt.format(item.count) +
+            " expedientes | promedio " +
+            item.avgAge.toFixed(1) +
+            " dias</span>" +
+            "</div>" +
+            '<span class="buyer-sla-badge ' +
+            item.sla.className +
+            '">' +
+            item.sla.label +
+            "</span></li>"
+        )
+        .join("")
+    : '<li class="priority-empty">No hay datos suficientes para SLA por comprador.</li>';
+}
+
+function getSlaLevel(avgAge) {
+  if (avgAge <= 30) {
+    return { label: "SLA saludable", className: "sla-ok" };
+  }
+  if (avgAge <= 60) {
+    return { label: "SLA en riesgo", className: "sla-warn" };
+  }
+  return { label: "SLA critico", className: "sla-crit" };
 }
 
 function getStatusAgeDays(row, now) {
