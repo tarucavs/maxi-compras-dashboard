@@ -1103,6 +1103,7 @@ function renderSelectedStatusExpedientes(rows, selectedStatus) {
       expediente,
       proceso: cleanText(row.proceso) || "Sin proceso",
       comprador: cleanText(row.comprador) || "Sin comprador",
+      objeto: cleanText(row.objeto) || "Sin objeto",
     });
   });
 
@@ -1122,6 +1123,8 @@ function renderSelectedStatusExpedientes(rows, selectedStatus) {
             escapeHtml(item.proceso) +
             " | " +
             escapeHtml(item.comprador) +
+            " | " +
+            escapeHtml(item.objeto) +
             "</span></li>"
         )
         .join("")
